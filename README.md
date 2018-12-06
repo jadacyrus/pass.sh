@@ -1,6 +1,6 @@
 # pass.sh
 
-- Uses python [cryptography library](https://cryptography.io/en/latest/fernet/) (Fernet asymmetric encryption) to encrypt all passwords
+- Uses python [cryptography library](https://cryptography.io/en/latest/fernet/) (symmetric encryption) to encrypt all passwords
 - Storage backend is [AWS Dynamo DB](https://aws.amazon.com/dynamodb/)
 - Web framework is [Bottle](https://www.bottlepy.org)
 
