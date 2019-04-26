@@ -58,7 +58,7 @@ class PassSh(Bottle):
     def bump_metric(self, field, **kwargs):
         try:
             value = self.metric_cache.increment(metric_name=field, value=1)
-            self.metric_store.metric(measurement='events_test',
+            self.metric_store.metric(measurement='events',
                     field=field,
                     value=value,
                     tags=kwargs)
