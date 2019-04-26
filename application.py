@@ -87,13 +87,13 @@ class PassSh(Bottle):
                 views_remaining = views_remaining - 1
                 plaintext_secret = self.password_encrypter.decrypt(secret)
                 self.dynamo_backend.increment(_id, 'views_remaining', -1)
-                self.bump_metric('show', status='success')
+                self.bump_metric('show_success')
                 return template('show', plaintext = plaintext_secret, views = views_remaining)
             else:
-                self.bump_metric('show', status='spent')
+                self.bump_metric('show_spent')
                 return template('index', error = 'The link you are trying to access is no longer valid')
         else:
-            self.bump_metric('show', status='expired')
+            self.bump_metric('show_expired')
             return template('index', error = 'The link you are trying to access is no longer valid')
 
     def create(self):
@@ -104,20 +104,20 @@ class PassSh(Bottle):
                         params['views'],
                         params['days'])
                 if success: 
-                    self.bump_metric('create', status='success')
+                    self.bump_metric('create_success')
                     if request_type == 'web':
                         return template('share', url = url, days = params['days'], views = params['views'])
                     else:
                         return { 'url': url, 'days': params['days'], 'views': params['views'] } 
 
                 else:
-                    self.bump_metric('create', status='backend_fail')
+                    self.bump_metric('create_fail_db')
                     return template('index', error = 'Backend service is unavailable')
             else:
-                self.bump_metric('create', status='empty_payload')
+                self.bump_metric('create_fail_empty')
                 return template('index', error = 'Nothing in payload')
         else:
-            self.bump_metric('create', status='bad_request')
+            self.bump_metric('create_fail_invalid')
             return template('index', error = 'Invalid parameters specified')
 
     def healthcheck(self):
