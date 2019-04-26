@@ -7,6 +7,8 @@ from password_encrypter import PasswordEncrypter
 from dynamo_backend import DynamoBackend
 from urllib.parse import urljoin
 from validation import Validator
+from metrics import MetricStore
+from cache import MetricCache
 
 class PassSh(Bottle):
     
@@ -24,6 +26,8 @@ class PassSh(Bottle):
         self.password_encrypter = PasswordEncrypter(self.ENV_ENCRYPTION_KEY)
         self.dynamo_backend = DynamoBackend(self.ENV_TABLE_NAME, self.ENV_AWS_REGION)
         self.validator = Validator(self.ENV_MAX_PW_LENGTH, self.ENV_MAX_DAYS, self.ENV_MAX_VIEWS)
+        self.metric_cache = MetricCache([(self.ENV_MEMCACHED_HOST, int(self.ENV_MEMCACHED_PORT))])
+        self.metric_store = MetricStore((self.ENV_INFLUXDB_HOST, int(self.ENV_INFLUXDB_PORT), self.ENV_INFLUXDB_DB)) 
 
     def establish_environment(self):
         self.ENV_ENCRYPTION_KEY = os.environ.get('ENCRYPTION_KEY', None)
@@ -41,10 +45,25 @@ class PassSh(Bottle):
         self.ENV_MAX_PW_LENGTH = os.environ.get('ENV_MAX_PW_LENGTH', 4096)
         self.ENV_MAX_DAYS = os.environ.get('ENV_MAX_DAYS', 5)
         self.ENV_MAX_VIEWS = os.environ.get('ENV_MAX_VIEWS', 10)
+        self.ENV_INFLUXDB_HOST = os.environ.get('ENV_INFLUXDB_HOST', 'localhost')
+        self.ENV_INFLUXDB_PORT = os.environ.get('ENV_INFLUXDB_PORT', 8086)
+        self.ENV_INFLUXDB_DB = os.environ.get('ENV_INFLUXDB_DB', 'pass')
+        self.ENV_MEMCACHED_HOST = os.environ.get('ENV_MEMCACHED_HOST', 'localhost')
+        self.ENV_MEMCACHED_PORT = os.environ.get('ENV_MEMCACHED_PORT', 11211)
 
     def start(self):
         print('Password sharing service is alive')
         self.run(host = self.ENV_HOST, port = int(self.ENV_PORT), server = self.ENV_BACKEND, debug = int(self.ENV_DEBUG))
+    
+    def bump_metric(self, field, **kwargs):
+        try:
+            value = self.metric_cache.increment(metric_name=field, value=1)
+            self.metric_store.metric(measurement='events_test',
+                    field=field,
+                    value=value,
+                    tags=kwargs)
+        except Exception as e:
+            print("!!! bump_metric() failed with {}".format(e))
 
     def after_request(self):
         response.headers['strict-transport-security'] = "max-age=31536000; includeSubDomains"
@@ -67,11 +86,14 @@ class PassSh(Bottle):
             if views_remaining > 0:
                 views_remaining = views_remaining - 1
                 plaintext_secret = self.password_encrypter.decrypt(secret)
-                self.dynamo_backend.increment(_id, 'views_remaining', -1) 
+                self.dynamo_backend.increment(_id, 'views_remaining', -1)
+                self.bump_metric('show', status='success')
                 return template('show', plaintext = plaintext_secret, views = views_remaining)
             else:
+                self.bump_metric('show', status='spent')
                 return template('index', error = 'The link you are trying to access is no longer valid')
         else:
+            self.bump_metric('show', status='expired')
             return template('index', error = 'The link you are trying to access is no longer valid')
 
     def create(self):
@@ -81,16 +103,21 @@ class PassSh(Bottle):
                 success, url = self.create_secret(params['secret'],
                         params['views'],
                         params['days'])
-                if success:
+                if success: 
+                    self.bump_metric('create', status='success')
                     if request_type == 'web':
                         return template('share', url = url, days = params['days'], views = params['views'])
                     else:
                         return { 'url': url, 'days': params['days'], 'views': params['views'] } 
+
                 else:
+                    self.bump_metric('create', status='backend_fail')
                     return template('index', error = 'Backend service is unavailable')
             else:
+                self.bump_metric('create', status='empty_payload')
                 return template('index', error = 'Nothing in payload')
         else:
+            self.bump_metric('create', status='bad_request')
             return template('index', error = 'Invalid parameters specified')
 
     def healthcheck(self):
