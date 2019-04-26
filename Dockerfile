@@ -1,4 +1,4 @@
-FROM python:3.5-alpine
+FROM python:3.6-alpine
 
 RUN apk update \
   && apk add ca-certificates wget \
@@ -11,6 +11,8 @@ RUN apk update \
 COPY ./ /app
 
 WORKDIR /app
+
+RUN pip install pip --upgrade
 
 RUN pip install -r requirements.txt
 
