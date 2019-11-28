@@ -13,6 +13,13 @@ curl -X POST https://pass.sh/create -H 'Content-Type:application/json' \
   --data '{"secret":"foobar", "days": "5", "views": "10"}'
 ```
 
+with IP whitelist
+
+```bash
+curl -X POST https://pass.sh/create -H 'Content-Type:application/json' \
+  --data '{"secret":"foobar", "days": "5", "views": "10", "ip": "2601:87:80:1811:90f7:67b9:4747:64a4"}'
+```
+
 response:
 
 ```json

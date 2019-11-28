@@ -3,6 +3,7 @@ import os, sys
 import settings
 import uuid
 import time
+import ipaddress
 from password_encrypter import PasswordEncrypter
 from dynamo_backend import DynamoBackend
 from urllib.parse import urljoin
@@ -10,8 +11,10 @@ from validation import Validator
 from metrics import MetricStore
 from cache import MetricCache
 
+__VERSION__ = "0.0.1"
+
 class PassSh(Bottle):
-    
+
     def __init__(self):
         super().__init__()
         self.establish_environment()
@@ -27,15 +30,15 @@ class PassSh(Bottle):
         self.dynamo_backend = DynamoBackend(self.ENV_TABLE_NAME, self.ENV_AWS_REGION)
         self.validator = Validator(self.ENV_MAX_PW_LENGTH, self.ENV_MAX_DAYS, self.ENV_MAX_VIEWS)
         self.metric_cache = MetricCache([(self.ENV_MEMCACHED_HOST, int(self.ENV_MEMCACHED_PORT))])
-        self.metric_store = MetricStore((self.ENV_INFLUXDB_HOST, int(self.ENV_INFLUXDB_PORT), self.ENV_INFLUXDB_DB)) 
+        self.metric_store = MetricStore((self.ENV_INFLUXDB_HOST, int(self.ENV_INFLUXDB_PORT), self.ENV_INFLUXDB_DB))
 
     def establish_environment(self):
         self.ENV_ENCRYPTION_KEY = os.environ.get('ENCRYPTION_KEY', None)
         if self.ENV_ENCRYPTION_KEY == None:
             print("No encryption key specified (ENCRYPTION_KEY not set). A key is required to start the service")
             sys.exit(1)
-        self.ENV_HOST = os.environ.get('BIND_TO', '0.0.0.0') 
-        self.ENV_PORT = os.environ.get('PORT', 3000) 
+        self.ENV_HOST = os.environ.get('BIND_TO', '0.0.0.0')
+        self.ENV_PORT = os.environ.get('PORT', 3000)
         self.ENV_BACKEND = os.environ.get('BACKEND', 'paste')
         self.ENV_TABLE_NAME = os.environ.get('TABLE_NAME', 'test_password_share')
         self.ENV_BASE_URL = os.environ.get('BASE_URL', 'http://localhost:3000')
@@ -43,8 +46,8 @@ class PassSh(Bottle):
         self.ENV_DEBUG = os.environ.get('ENV_DEBUG', False)
         self.ENV_HANDLE_SSL_REDIRECT = os.environ.get('ENV_HANDLE_SSL_REDIRECT', True)
         self.ENV_MAX_PW_LENGTH = os.environ.get('ENV_MAX_PW_LENGTH', 4096)
-        self.ENV_MAX_DAYS = os.environ.get('ENV_MAX_DAYS', 5)
-        self.ENV_MAX_VIEWS = os.environ.get('ENV_MAX_VIEWS', 10)
+        self.ENV_MAX_DAYS = os.environ.get('ENV_MAX_DAYS', 90)
+        self.ENV_MAX_VIEWS = os.environ.get('ENV_MAX_VIEWS', 25)
         self.ENV_INFLUXDB_HOST = os.environ.get('ENV_INFLUXDB_HOST', 'localhost')
         self.ENV_INFLUXDB_PORT = os.environ.get('ENV_INFLUXDB_PORT', 8086)
         self.ENV_INFLUXDB_DB = os.environ.get('ENV_INFLUXDB_DB', 'pass')
@@ -54,7 +57,7 @@ class PassSh(Bottle):
     def start(self):
         print('Password sharing service is alive')
         self.run(host = self.ENV_HOST, port = int(self.ENV_PORT), server = self.ENV_BACKEND, debug = int(self.ENV_DEBUG))
-    
+
     def bump_metric(self, field, **kwargs):
         try:
             value = self.metric_cache.increment(metric_name=field, value=1)
@@ -80,9 +83,20 @@ class PassSh(Bottle):
     def show(self, uuid):
         item = self.dynamo_backend.get(uuid)
         if 'Item' in item:
-            secret = item['Item']['secret']
-            views_remaining = item['Item']['views_remaining']
-            _id = item['Item']['uuid']
+            _item = item['Item']
+            secret = _item['secret']
+            views_remaining = _item['views_remaining']
+            _id = _item['uuid']
+            ip = _item.get('ip', None)
+            if ip:
+                client_ip = ipaddress.ip_network(request.environ.get('HTTP_X_REAL_IP', request.remote_addr))
+                allowed = False
+                for ip in ip.split(','):
+                    net = ipaddress.ip_network(ip)
+                    if net.overlaps(client_ip):
+                        allowed = True
+                if not allowed:
+                    return template('index', error = ['Not available from {}'.format(client_ip)])
             if views_remaining > 0:
                 views_remaining = views_remaining - 1
                 plaintext_secret = self.password_encrypter.decrypt(secret)
@@ -91,34 +105,37 @@ class PassSh(Bottle):
                 return template('show', plaintext = plaintext_secret, views = views_remaining)
             else:
                 self.bump_metric('show_spent')
-                return template('index', error = 'The link you are trying to access is no longer valid')
+                return template('index', error = ['The link you are trying to access is no longer valid'])
         else:
             self.bump_metric('show_expired')
-            return template('index', error = 'The link you are trying to access is no longer valid')
+            return template('index', error = ['The link you are trying to access is no longer valid'])
 
     def create(self):
         request_type, params = self.parse_request()
-        if self.validate_params(params):
-            if params['secret']:
-                success, url = self.create_secret(params['secret'],
-                        params['views'],
-                        params['days'])
-                if success: 
-                    self.bump_metric('create_success')
-                    if request_type == 'web':
-                        return template('share', url = url, days = params['days'], views = params['views'])
-                    else:
-                        return { 'url': url, 'days': params['days'], 'views': params['views'] } 
+        valid, errs = self.validate_params(params)
+        if valid:
+            success, url = self.create_secret(secret = params['secret'],
+                    views = int(params['views']),
+                    days = params['days'],
+                    ip = params['ip'])
 
+            if success:
+                self.bump_metric('create_success')
+                share_args = { 'url': url, 'days': params['days'], 'views': params['views'] }
+                if request_type == 'web':
+                    if params['ip'] and params['ip'].strip():
+                        ip_list = params['ip'].split(',')
+                        share_args['ip_list'] = ip_list
+
+                    return template('share', **share_args)
                 else:
-                    self.bump_metric('create_fail_db')
-                    return template('index', error = 'Backend service is unavailable')
+                    return share_args
             else:
-                self.bump_metric('create_fail_empty')
-                return template('index', error = 'Nothing in payload')
+                self.bump_metric('create_fail_db')
+                return template('index', error = ['Backend service is unavailable'])
         else:
             self.bump_metric('create_fail_invalid')
-            return template('index', error = 'Invalid parameters specified')
+            return template('index', error = errs)
 
     def healthcheck(self):
         return 'This is the password sharing service. Go away!'
@@ -126,11 +143,16 @@ class PassSh(Bottle):
     def static(self, filename):
         return static_file(filename, root = 'static/')
 
-    def create_secret(self, secret, views, days):
-        encrypted_secret = self.password_encrypter.encrypt(secret)
-        expires_at = int(time.time() + int(days) * 864000)
+    def create_secret(self, **kwargs):
+        encrypted_secret = self.password_encrypter.encrypt(kwargs['secret'])
+        expires_at = int(time.time() + int(kwargs['days']) * 864000)
         _id = str(uuid.uuid4())
-        item = { 'uuid': _id, 'ttl': expires_at, 'views_remaining': int(views), 'secret': encrypted_secret }
+
+        item = { 'uuid': _id, 'ttl': expires_at, 'views_remaining': int(kwargs['views']), 'secret': encrypted_secret }
+
+        if kwargs['ip'] and kwargs['ip'].strip():
+            item['ip'] = kwargs['ip']
+
         r = self.dynamo_backend.put(item)
         if r['ResponseMetadata']['HTTPStatusCode'] == 200:
             url = urljoin(self.ENV_BASE_URL, '/show/' + _id)
@@ -148,8 +170,19 @@ class PassSh(Bottle):
         secret = params.get('secret', None)
         days = params.get('days', None)
         views = params.get('views', None)
+        ip = params.get('ip', None)
 
-        return self.validator.is_valid_password(secret) and self.validator.is_valid_days(days) and self.validator.is_valid_views(views)
+        results = []
+        results.append(self.validator.is_valid_password(secret))
+        results.append(self.validator.is_valid_days(days))
+        results.append(self.validator.is_valid_views(views))
+        if ip:
+            ips = ip.split(",")
+            valid_ip = all(self.validator.is_valid_ip(ipaddr)[0] for ipaddr in ips)
+            err_ip = ','.join(self.validator.is_valid_ip(ipaddr)[1] for ipaddr in ips)
+            results.append((valid_ip, err_ip))
+
+        return (all(result[0] for result in results), [result[1] if not result[0] else None for result in results])
 
 if __name__ == '__main__':
     service = PassSh()
