@@ -8,11 +8,13 @@ RUN apk update \
   && apk add coreutils \
   && apk add g++ build-base libffi-dev openssl-dev python-dev
 
+RUN pip install pip --upgrade
+
+COPY ./requirements.txt /
+
+RUN pip install -r requirements.txt
+
 COPY ./ /app
 
 WORKDIR /app
-
-RUN pip install pip --upgrade
-
-RUN pip install -r requirements.txt
 
