@@ -11,7 +11,7 @@ from validation import Validator
 from metrics import MetricStore
 from cache import MetricCache
 
-__VERSION__ = "0.0.1"
+__VERSION__ = "0.0.2"
 
 class PassSh(Bottle):
 
@@ -23,6 +23,7 @@ class PassSh(Bottle):
         self.route("/create", method = "POST", callback = self.create)
         self.route("/static/<filename>", method = "GET", callback = self.static)
         self.route("/healthz", method = "GET", callback = self.healthcheck)
+        self.route("/sitemap.xml", method = "GET", callback = self.sitemap)
         self.add_hook("before_request", self.before_request)
         self.add_hook("after_request", self.after_request)
 
@@ -81,6 +82,7 @@ class PassSh(Bottle):
         return template('index', max_days = self.ENV_MAX_DAYS, max_views = self.ENV_MAX_VIEWS)
 
     def show(self, uuid):
+        response.headers['referrer-policy'] = 'no-referrer'
         item = self.dynamo_backend.get(uuid)
         if 'Item' in item:
             _item = item['Item']
@@ -142,6 +144,9 @@ class PassSh(Bottle):
 
     def static(self, filename):
         return static_file(filename, root = 'static/')
+
+    def sitemap(self):
+        return static_file("sitemap.xml", root = 'static/')
 
     def create_secret(self, **kwargs):
         encrypted_secret = self.password_encrypter.encrypt(kwargs['secret'])
