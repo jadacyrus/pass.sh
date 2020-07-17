@@ -77,6 +77,7 @@ class PassSh(Bottle):
             scheme = request.get_header('X-Forwarded-Proto', None)
             if scheme and scheme != 'https':
                 return redirect(urljoin(self.ENV_BASE_URL, request.path))
+        return
 
     def index(self):
         return template('index', max_days = self.ENV_MAX_DAYS, max_views = self.ENV_MAX_VIEWS)

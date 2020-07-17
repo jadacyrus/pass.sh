@@ -16,7 +16,7 @@
 </script>
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8">
 <meta name="Description" content="Use pass.sh to generate expiring links for passwords & secure with IP whitelist. ">
-<meta name="Keywords" content="passwords, password, share password, private password link, one time password, expiring password link">
+<meta name="Keywords" content="passwords, password, share password, private password link, one time password, expiring password link, passwordpop.com, passwordtolink.com, pwshare.net pwtolink.com">
 <meta name=”robots” content="index, follow">
 <!-- Google Fonts -->
 <link href="https://fonts.googleapis.com/css?family=Fira+Code:400,500|VT323&display=swap" rel="stylesheet">
