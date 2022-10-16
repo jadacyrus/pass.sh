@@ -13,9 +13,9 @@
 <form method="post" action="/create">
     <fieldset class="uk-fieldset">
         <div class="uk-margin">
-            <input class="uk-input" style="font-family: 'Fira Code', monospace; font-weight: 500;" type="text" placeholder="password" name="secret">
+            <input class="uk-input" style="font-family: 'Fira Code', monospace; font-weight: 500;" type="text" placeholder="password" name="secret" spellcheck="false">
         </div>
-        <p>Delete password after <input type="number" class="uk-input uk-form-width-xsmall" min="1" value="5" step="1" name="days"> days or <input type="number" class="uk-input uk-form-width-spsmall" min="1" value="10" step="1" name="views"> views.
+        <p>Delete password after <input type="number" class="uk-input uk-form-width-xsmall" max="90" min="1" value="5" step="1" name="days"> days or <input type="number" class="uk-input uk-form-width-spsmall" min="1" value="10" max="25" step="1" name="views"> views.
         <p>IP Whitelist:  <input type="text" class="uk-input uk-form-width-medium" name="ip" style="margin-right: 6px"><span uk-icon="question" uk-tooltip="title: Enter an IPv4 or IPv6 Address/CIDR. Also accepts a comma separated list of IPv4/IPv6 Address/CIDR values. Leave blank for none."></span></p>
         <div class="uk-margin">
           <input type="submit" class="uk-button uk-button-primary">
