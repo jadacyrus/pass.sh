@@ -11,7 +11,7 @@ from validation import Validator
 from metrics import MetricStore
 from cache import MetricCache
 
-__VERSION__ = "0.0.2"
+__VERSION__ = "0.0.3"
 
 class PassSh(Bottle):
 
@@ -60,6 +60,7 @@ class PassSh(Bottle):
         self.run(host = self.ENV_HOST, port = int(self.ENV_PORT), server = self.ENV_BACKEND, debug = int(self.ENV_DEBUG))
 
     def bump_metric(self, field, **kwargs):
+        return
         try:
             value = self.metric_cache.increment(metric_name=field, value=1)
             self.metric_store.metric(measurement='events',

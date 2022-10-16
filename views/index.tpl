@@ -26,6 +26,8 @@
 <div uk-alert style="max-width: 900px; padding-top: 30px;">
     <a class="uk-alert-close" uk-close></a>
     <span class="uk-label" style="background-color: rgba(30, 135, 240, .5)"># CHANGELOG</span>
+    <p><span class="uk-label" style="background-color: rgba(30, 135, 240, .25)">## [0.0.3] - 2022-10-16</span></p>
+    <span uk-icon="chevron-right"></span><b>Added</b> - spellcheck=false HTML attribute to password input field to mitigate enhanced spellcheck data exfiltration.<br>
     <p><span class="uk-label" style="background-color: rgba(30, 135, 240, .25)">## [0.0.2] - 2020-07-16</span></p>
     <span uk-icon="chevron-right"></span><b>Added</b> no-referrer policy to /show route.<br>
     <span uk-icon="chevron-right"></span><b>Added</b> better support for mobile clients.<br>
